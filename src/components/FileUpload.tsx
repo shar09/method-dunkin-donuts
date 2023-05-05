@@ -8,32 +8,34 @@ export function FileUpload () {
         const xml = await res.text();
         const result1 = convert.xml2json(xml, {compact: true, spaces: 4});
         // console.log(result1);
-        // console.log(xml);
-        return xml;
+        return JSON.parse(result1);
     }
 
     useEffect(() => {
         (async () => {
             const data = await readUrl();
-            
-            // const dataWithoutRoot = data.slice(data.indexOf('<root>') + 6, data.lastIndexOf('</row>') + 6);
-            // const arrayData = dataWithoutRoot.split(/(?<=<\/row>)/);
-            // console.log(arrayData[arrayData.length - 1]);
-            // if(arrayData[arrayData.length - 1].trim() === '') arrayData.pop();
-            // setXmlData(arrayData);
-            // console.log(arrayData.length);
-            
-            
-            const dataWithoutRoot = data.slice(data.indexOf('<root>') + 6, data.lastIndexOf('</row>') + 6);
-            const dataToArray = dataWithoutRoot.split(/(?<=<\/row>)/);
-            console.log(dataToArray.slice(0, 3).join(''));
+            // const groupBySourceAccount = data.root.row.reduce((accumulator, currentValue) => accumulator + currentValue,
+            // []);
+            const groupBySource = () => {
+                const groupedResults = Object.values(
+                    data.root.row.reduce((acc: any, item: any) => {
+                        acc[item.Payor.AccountNumber._text] = [...(acc[item.Payor.AccountNumber._text] || []), item];
+                        return acc;
+                    },{})
+                );
+                return groupedResults;
+            }
+            const grouped: any[] = groupBySource();
 
-            const smallXml = `<root>${dataToArray.slice(0, 3).join('')}</root>`;
-            const result1 = convert.xml2json(smallXml, {compact: true, spaces: 4});
-            console.log(result1);
+            let res: any[] = [];
+            for(let element of grouped) {
+                res = res.concat(element.filter((item: any) => {
+                    return item.Employee.DunkinId._text === 'EMP-c8d91f03-594f-43cf-972a-7db7fac8124a'
+                }));
+            }
 
+            console.log(res);
 
-            console.log(dataToArray.length);
           })();
     }, [])
     
