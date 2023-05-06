@@ -18,11 +18,11 @@ const api = {
    * @returns list of existing entities
    */
   getEntities: async (options: { type?: string; status?: string }) => {
-    const entities = await axios.get(`${url}/entities`, {
+    const res = await axios.get(`${url}/entities`, {
       params: options,
       headers: config,
     });
-    return entities;
+    return res.data;
   },
 
   /**
