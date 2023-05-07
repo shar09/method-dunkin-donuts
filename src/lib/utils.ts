@@ -63,7 +63,7 @@ export const createCorporateEntity = async () => {
         ) === index
     );
 
-    console.log("latest dunkin entity: ", latestDunkinEntity);
+    // console.log("latest dunkin entity: ", latestDunkinEntity);
 
     return latestDunkinEntity[0]?.id;
   };
@@ -86,8 +86,6 @@ export const createCorporateEntity = async () => {
         zip: "50613", // Note: Using real Iowa state zip code isntead of zip code from xml file
       },
     });
-
-    console.log("response: ", response);
 
     // Wait for entity to be created
     await sleep(5000);
@@ -154,7 +152,7 @@ export const createSourceAccounts = async () => {
 
       SOURCE_ACCOUNTS_OBJECT = {
         ...SOURCE_ACCOUNTS_OBJECT,
-        [response.data.data.ach.number]: response.data.data.id,
+        [response.data.ach.number]: response.data.id,
       };
     } else {
       SOURCE_ACCOUNTS_OBJECT = {

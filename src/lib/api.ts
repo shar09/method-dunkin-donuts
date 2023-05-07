@@ -2,7 +2,9 @@ import axios from "axios";
 
 const url = "https://dev.methodfi.com";
 
-const api_key = process.env.REACT_APP_API_KEY ? process.env.REACT_APP_API_KEY : "";
+const api_key = process.env.REACT_APP_API_KEY
+  ? process.env.REACT_APP_API_KEY
+  : "";
 
 const config = {
   Authorization: `Bearer ${api_key}`,
@@ -42,9 +44,10 @@ const api = {
    * @returns creates a new entity
    */
   createEntity: async (options: any) => {
-    return await axios.post(`${url}/entities`, options, {
+    const res = await axios.post(`${url}/entities`, options, {
       headers: config,
     });
+    return res.data;
   },
 
   /**
@@ -53,9 +56,10 @@ const api = {
    * @returns creates a bank account for payment transfers
    */
   createAccount: async (options: any) => {
-    return await axios.post(`${url}/accounts`, options, {
+    const res = await axios.post(`${url}/accounts`, options, {
       headers: config,
     });
+    return res.data;
   },
 
   /**
@@ -64,9 +68,10 @@ const api = {
    * @returns makes payment for given account id's
    */
   makePayment: async (options: any) => {
-    return await axios.post(`${url}/payments`, options, {
+    const res = await axios.post(`${url}/payments`, options, {
       headers: config,
     });
+    return res.data;
   },
 };
 
