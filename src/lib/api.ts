@@ -2,9 +2,7 @@ import axios from "axios";
 
 const url = "https://dev.methodfi.com";
 
-const api_key = process.env.REACT_APP_API_KEY
-  ? process.env.REACT_APP_API_KEY
-  : "";
+const api_key = process.env.REACT_APP_API_KEY ? process.env.REACT_APP_API_KEY : "";
 
 const config = {
   Authorization: `Bearer ${api_key}`,
@@ -19,6 +17,19 @@ const api = {
    */
   getEntities: async (options: { type?: string; status?: string }) => {
     const res = await axios.get(`${url}/entities`, {
+      params: options,
+      headers: config,
+    });
+    return res.data;
+  },
+
+  /**
+   * Get list of accounts
+   * @param options type, status
+   * @returns list of existing entities
+   */
+  getAccounts: async (options: { type?: string; status?: string }) => {
+    const res = await axios.get(`${url}/accounts`, {
       params: options,
       headers: config,
     });
