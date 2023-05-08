@@ -1,6 +1,9 @@
-import { nextTick } from "process";
 import api from "./api";
 import convert from "xml-js";
+import {
+  TokenBucketRateLimiter,
+  fetchAndRetryIfNecessary,
+} from "./api-throttling";
 
 let CORPORATION_ENTITY_ID: any;
 export let PAYMENTS_JSON: any = {};
@@ -9,6 +12,15 @@ let SOURCE_ACCOUNTS_OBJECT: any;
 
 function sleep(milliseconds: number) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+// mm-dd-yyyy to yyyy-mm-dd
+function formatDate(date: string) {
+  let dateArray: any = date.split("-").reverse();
+  const tmp = dateArray[2];
+  dateArray[2] = dateArray[1];
+  dateArray[1] = tmp;
+  dateArray = dateArray.join("-");
 }
 
 function compareFn(a: any, b: any) {
@@ -24,7 +36,7 @@ function compareFn(a: any, b: any) {
 
 export const readUrl = async () => {
   const url =
-    "https://file.notion.so/f/s/8c08a999-4b9e-44b8-bc17-bbaf8c219101/dunkin.xml?id=377557b0-66f2-45d7-a159-b2381391bfa2&table=block&spaceId=d0d5787b-ff93-48d4-bb8d-bffd9edc42e4&expirationTimestamp=1683512957215&signature=pwcF1FDDEXqOgJUvvTa3PT3DyhM4LcZx7pfozASRfPI&downloadName=dunkin.xml";
+    "https://file.notion.so/f/s/8c08a999-4b9e-44b8-bc17-bbaf8c219101/dunkin.xml?id=377557b0-66f2-45d7-a159-b2381391bfa2&table=block&spaceId=d0d5787b-ff93-48d4-bb8d-bffd9edc42e4&expirationTimestamp=1683606673925&signature=wxWPW6ruqoP3NFqmv45xGJqtgZ1XCDO3eOWv27_c_Bk&downloadName=dunkin.xml";
   const res = await fetch(url);
   const xml = await res.text();
   const result = convert.xml2json(xml, { compact: true, spaces: 4 });
@@ -32,7 +44,7 @@ export const readUrl = async () => {
   FIRST_PAYMENT_JSON = JSON.parse(result).root.row[0];
   // console.log(FIRST_PAYMENT_FROM_XML);
   // SLICE DATA FOR INITIAL TESTING
-  PAYMENTS_JSON = JSON.parse(result).root.row.slice(0, 1200);
+  PAYMENTS_JSON = JSON.parse(result).root.row.slice(0, 1500);
 
   return PAYMENTS_JSON;
 };
@@ -166,30 +178,98 @@ export const createSourceAccounts = async () => {
 
 // Create Individual Entities - Hardcode phone number
 export const createIndividualEntities = async () => {
-  const groupByEmployee = () => {
-    const groupedResults = Object.values(
-      PAYMENTS_JSON.reduce((acc: any, item: any) => {
-        acc[item.Employee.DunkinId._text] = [
-          ...(acc[item.Employee.DunkinId._text] || []),
-          item,
-        ];
-        return acc;
-      }, {})
-    );
-    return groupedResults;
-  };
-  const grouped: any[] = groupByEmployee();
-  console.log(grouped);
+  const groupByEmployee: any = Object.values(
+    PAYMENTS_JSON.reduce((acc: any, item: any) => {
+      acc[item.Employee.DunkinId._text] = [
+        ...(acc[item.Employee.DunkinId._text] || []),
+        item,
+      ];
+      return acc;
+    }, {})
+  );
+
+  console.log("group by employee: ", groupByEmployee);
 
   // Create Individual Entities if not existing
-  // - Get all existing entities
-  // - Sort the entities using first name
-  // - Loop through grouped array, get first elements first name and last name
-  // - Binary search on the existing entities and find the object using first and last name params
-  // - If object is already existing - Do not create entity
-  // - Otherwise create a new individual entity
+  // - Get all existing indiviual entities - no duplicates
+  const existingEntities = await api.getEntities({
+    type: "individual",
+    status: "active",
+  });
+
+  // existingEntities.data is an array [{},{},{},] - 1000 objs
+  // Convert to hashmap with key firstname-lastname-dob {} - 1000 keys
+
+  const existingEntitiesObject: any = {};
+
+  if (existingEntities.data.length > 0) {
+    for (let entity of existingEntities.data) {
+      // TODO: Using simple check if entity has valid capabilities. Update to proper check.
+      if (entity.capabilities.length > 2) {
+        existingEntitiesObject[
+          `${entity.individual.first_name}-${entity.individual.last_name}`
+        ] = entity.id;
+      }
+    }
+  }
+
+  console.log(
+    Object.keys(existingEntitiesObject).length,
+    ":",
+    groupByEmployee.length
+  );
+
+  const createEntityPromises = [];
+
+  console.log("existing entities: ", existingEntitiesObject);
+  // Sleep 1 min before making api calls for creating individual entities
+  // await sleep(60000);
+  for (let paymentsArray of groupByEmployee) {
+    // Check if employee is already in existing entities
+    if (
+      !existingEntitiesObject[
+        `${paymentsArray[0].Employee.FirstName._text}-${paymentsArray[0].Employee.LastName._text}`
+      ]
+    ) {
+      console.log(
+        `${paymentsArray[0].Employee.FirstName._text}-${paymentsArray[0].Employee.LastName._text}`
+      );
+      createEntityPromises.push({
+        type: "individual",
+        individual: {
+          first_name: paymentsArray[0].Employee.FirstName._text,
+          last_name: paymentsArray[0].Employee.LastName._text,
+          phone: "15121231111",
+          dob: formatDate(paymentsArray[0].Employee.DOB._text),
+        },
+      });
+    }
+  }
+
+  const tokenBucket = new TokenBucketRateLimiter({
+    maxRequests: 600,
+    maxRequestWindowMS: 60000,
+  });
+  const promises = createEntityPromises.map((item) =>
+    fetchAndRetryIfNecessary(() =>
+      tokenBucket.acquireToken(() => api.createEntity(item))
+    )
+  );
+  const responses = await Promise.all(promises);
+  console.log("entity responses: ", responses);
+  for (const response of responses) {
+    existingEntitiesObject[
+      `${response.data.individual.first_name}-${response.data.individual.last_name}`
+    ] = response.data.id;
+  }
 };
 
 // Create Destination payment accounts
+export const liabilityAccounts = async () => {
+  const allExistingLiabilityAccounts = await api.getAccounts({
+    type: "individual",
+    status: "active",
+  });
+};
 
 // Initiate payments

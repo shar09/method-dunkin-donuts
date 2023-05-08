@@ -12,6 +12,12 @@ const config = {
 };
 
 const api = {
+  ping: async () => {
+    const res = await axios.get(`${url}/entities`, {
+      headers: config,
+    });
+    return res.data;
+  },
   /**
    * Get list of entities
    * @param options type, status

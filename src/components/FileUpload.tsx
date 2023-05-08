@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react';
 import { readUrl, createCorporateEntity, createSourceAccounts, createIndividualEntities } from '../lib/utils';
 
+import api from "../lib/api";
+
 export function FileUpload () {
+    // const ping600 = Array(601).fill(api.getEntities({
+    //     type: "c_corporation",
+    //     status: "active",
+    //   }));
+
     useEffect(() => {
         (async () => {
             await readUrl();
