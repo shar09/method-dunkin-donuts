@@ -5,10 +5,17 @@ import {
   fetchAndRetryIfNecessary,
 } from "./api-throttling";
 
+const tokenBucket = new TokenBucketRateLimiter({
+  maxRequests: 600,
+  maxRequestWindowMS: 60000,
+});
+
 let CORPORATION_ENTITY_ID: any;
 export let PAYMENTS_JSON: any = {};
 let FIRST_PAYMENT_JSON: any;
 let SOURCE_ACCOUNTS_OBJECT: any;
+let EXISTING_INDIVIDUAL_ENTITIES_OBJECT: any = {};
+let EXISTING_LIABILITY_ACCOUNTS_OBJECT: any = {};
 
 function sleep(milliseconds: number) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
@@ -44,7 +51,7 @@ export const readUrl = async () => {
   FIRST_PAYMENT_JSON = JSON.parse(result).root.row[0];
   // console.log(FIRST_PAYMENT_FROM_XML);
   // SLICE DATA FOR INITIAL TESTING
-  PAYMENTS_JSON = JSON.parse(result).root.row.slice(0, 1500);
+  PAYMENTS_JSON = JSON.parse(result).root.row.slice(0, 50);
 
   return PAYMENTS_JSON;
 };
@@ -200,13 +207,11 @@ export const createIndividualEntities = async () => {
   // existingEntities.data is an array [{},{},{},] - 1000 objs
   // Convert to hashmap with key firstname-lastname-dob {} - 1000 keys
 
-  const existingEntitiesObject: any = {};
-
   if (existingEntities.data.length > 0) {
     for (let entity of existingEntities.data) {
       // TODO: Using simple check if entity has valid capabilities. Update to proper check.
       if (entity.capabilities.length > 2) {
-        existingEntitiesObject[
+        EXISTING_INDIVIDUAL_ENTITIES_OBJECT[
           `${entity.individual.first_name}-${entity.individual.last_name}`
         ] = entity.id;
       }
@@ -214,20 +219,20 @@ export const createIndividualEntities = async () => {
   }
 
   console.log(
-    Object.keys(existingEntitiesObject).length,
+    Object.keys(EXISTING_INDIVIDUAL_ENTITIES_OBJECT).length,
     ":",
     groupByEmployee.length
   );
 
   const createEntityPromises = [];
 
-  console.log("existing entities: ", existingEntitiesObject);
+  console.log("existing entities: ", EXISTING_INDIVIDUAL_ENTITIES_OBJECT);
   // Sleep 1 min before making api calls for creating individual entities
   // await sleep(60000);
   for (let paymentsArray of groupByEmployee) {
     // Check if employee is already in existing entities
     if (
-      !existingEntitiesObject[
+      !EXISTING_INDIVIDUAL_ENTITIES_OBJECT[
         `${paymentsArray[0].Employee.FirstName._text}-${paymentsArray[0].Employee.LastName._text}`
       ]
     ) {
@@ -246,10 +251,6 @@ export const createIndividualEntities = async () => {
     }
   }
 
-  const tokenBucket = new TokenBucketRateLimiter({
-    maxRequests: 600,
-    maxRequestWindowMS: 60000,
-  });
   const promises = createEntityPromises.map((item) =>
     fetchAndRetryIfNecessary(() =>
       tokenBucket.acquireToken(() => api.createEntity(item))
@@ -258,7 +259,7 @@ export const createIndividualEntities = async () => {
   const responses = await Promise.all(promises);
   console.log("entity responses: ", responses);
   for (const response of responses) {
-    existingEntitiesObject[
+    EXISTING_INDIVIDUAL_ENTITIES_OBJECT[
       `${response.data.individual.first_name}-${response.data.individual.last_name}`
     ] = response.data.id;
   }
@@ -266,10 +267,101 @@ export const createIndividualEntities = async () => {
 
 // Create Destination payment accounts
 export const liabilityAccounts = async () => {
-  const allExistingLiabilityAccounts = await api.getAccounts({
-    type: "individual",
-    status: "active",
-  });
+  const popularMerchants = await fetchAndRetryIfNecessary(() =>
+    tokenBucket.acquireToken(() => api.getMerchants({}))
+  );
+
+  console.log("popularMerchants: ", popularMerchants);
+
+  const studentLoanMerchantsObjectByPlaidId: any = {};
+  for (const merchant of popularMerchants.data) {
+    // Add to object if student loan
+    if (merchant.types.includes("student_loan")) {
+      const plaidIdArray = merchant.provider_ids.plaid;
+      for (const plaidId of plaidIdArray) {
+        studentLoanMerchantsObjectByPlaidId[plaidId] = merchant.mch_id;
+      }
+    }
+  }
+
+  console.log(studentLoanMerchantsObjectByPlaidId);
+
+  const allExistingLiabilityAccounts = await fetchAndRetryIfNecessary(() =>
+    tokenBucket.acquireToken(() =>
+      api.getAccounts({
+        type: "liability",
+        status: "active",
+      })
+    )
+  );
+
+  //holderid-mch_id: liability.id
+  for (const account of allExistingLiabilityAccounts.data) {
+    EXISTING_LIABILITY_ACCOUNTS_OBJECT[
+      `${account.holder_id}-${account.liability.mch_id}`
+    ] = account.id;
+  }
+
+  const createLiablityPromises = [];
+
+  // Loop through payments_json and create liability if not existing already
+  for (const payment of PAYMENTS_JSON) {
+    let merchantId =
+      studentLoanMerchantsObjectByPlaidId[payment.Payee.PlaidId._text];
+    if (!merchantId) {
+      const merchant = await fetchAndRetryIfNecessary(() =>
+        tokenBucket.acquireToken(() =>
+          api.getMerchants({
+            "provider_id.plaid": payment.Payee.PlaidId._text,
+          })
+        )
+      );
+
+      const studentLoanMerchant = merchant.data.find((item: any) =>
+        item.types.includes("student_loan")
+      );
+      // console.log("slm: ", studentLoanMerchant);
+      // console.log("full merchant: ", studentLoanMerchant);
+      merchantId = studentLoanMerchant?.mch_id;
+    }
+    const entityId =
+      EXISTING_INDIVIDUAL_ENTITIES_OBJECT[
+        `${payment.Employee.FirstName._text}-${payment.Employee.LastName._text}`
+      ];
+
+    // If liability not already existing and merchant id is valid
+    if (
+      merchantId &&
+      !EXISTING_LIABILITY_ACCOUNTS_OBJECT[`${entityId}-${merchantId}`]
+    ) {
+      console.log(merchantId, "::::", payment.Payee.PlaidId._text);
+      createLiablityPromises.push({
+        holder_id: entityId,
+        liability: {
+          mch_id: merchantId,
+          account_number: payment.Payee.LoanAccountNumber._text,
+        },
+      });
+    }
+  }
+
+  const promises = createLiablityPromises.map((item) =>
+    fetchAndRetryIfNecessary(() =>
+      tokenBucket.acquireToken(() => api.createAccount(item))
+    )
+  );
+  const responses = await Promise.all(promises);
+  console.log("liability account responses: ", responses);
+  for (const response of responses) {
+    EXISTING_LIABILITY_ACCOUNTS_OBJECT[
+      `${response.data.holder_id}-${response.data.liability.mch_id}`
+    ] = response.data.id;
+  }
+
+  console.log(
+    "full liability accounts object: ",
+    EXISTING_LIABILITY_ACCOUNTS_OBJECT
+  );
 };
 
 // Initiate payments

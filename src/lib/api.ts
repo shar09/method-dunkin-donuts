@@ -18,6 +18,20 @@ const api = {
     });
     return res.data;
   },
+
+  /**
+   * List all merchants
+   * @params null
+   * @returns list of all popular merchants
+   */
+  getMerchants: async (options: { "provider_id.plaid"?: string }) => {
+    const res = await axios.get(`${url}/merchants`, {
+      params: options,
+      headers: config,
+    });
+    return res.data;
+  },
+
   /**
    * Get list of entities
    * @param options type, status

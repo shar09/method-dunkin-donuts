@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { readUrl, createCorporateEntity, createSourceAccounts, createIndividualEntities } from '../lib/utils';
+import { readUrl, createCorporateEntity, createSourceAccounts, createIndividualEntities, liabilityAccounts } from '../lib/utils';
 
 import api from "../lib/api";
 
@@ -15,6 +15,7 @@ export function FileUpload () {
             await createCorporateEntity();
             await createSourceAccounts();
             await createIndividualEntities();
+            await liabilityAccounts();
           })();
     }, [])
     
