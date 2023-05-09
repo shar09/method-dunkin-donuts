@@ -4,28 +4,15 @@ import {
   createCorporationEntity,
   createSourceAccounts,
   createIndividualEntities,
-  liabilityAccounts,
+  createLiabilityAccounts,
 } from "../lib/utils";
-import api from "../lib/api";
-
 import { useQuery } from "react-query";
 
 import "../App.css";
 
 export function FileUpload() {
-  useEffect(() => {
-    // (async () => {
-    //     await readUrl();
-    //     await createCorporateEntity();
-    //     await createSourceAccounts();
-    //     await createIndividualEntities();
-    //     await liabilityAccounts();
-    //   })();
-  }, []);
-
   const [xmlFileUrl, setXmlFileUrl] = useState("");
 
-  // ---------------------------------------------------------------------- //
   const readXmlData = async () => {
     const payments_json = await readXmlAndConvertToJson(xmlFileUrl);
     setXmlFileUrl("");
@@ -94,6 +81,25 @@ export function FileUpload() {
 
   // ---------------------------------------------------------------------- //
 
+  const fetchLiabilityAccountsObject = async () => {
+    return await createLiabilityAccounts(
+      paymentsJson,
+      individualEntitiesObject
+    );
+  };
+
+  const {
+    isFetching: isFetchingLiabilityAccountsObject,
+    isError: isErrorLiabilityAccountsObject,
+    isIdle: isIdleLiabilityAccountsObject,
+    data: liabilityAccountsObject,
+    remove: removeLiabilityAccountsObject,
+  } = useQuery(["liabilityAccountsObject"], fetchLiabilityAccountsObject, {
+    enabled: !!individualEntitiesObject,
+  });
+
+  // ---------------------------------------------------------------------- //
+
   const _renderXmlFileStatus = () => {
     if (isFetchingPaymentsJson) return <span>Loading...</span>;
     if (isErrorPaymentsJson) return <span>Error</span>;
@@ -146,6 +152,22 @@ export function FileUpload() {
       );
   };
 
+  const _renderLiabilityAccountStatus = () => {
+    if (isFetchingLiabilityAccountsObject) return <span>Loading...</span>;
+    if (isErrorLiabilityAccountsObject) return <span>Error</span>;
+    if (isIdleLiabilityAccountsObject) return <span>Idle</span>;
+    if (liabilityAccountsObject)
+      return (
+        <>
+          <span>Succesful | </span>
+          <span>
+            Number of liability accounts in database:{" "}
+            {Object.keys(liabilityAccountsObject)?.length}
+          </span>
+        </>
+      );
+  };
+
   return (
     <>
       <div className="navbar">
@@ -167,6 +189,7 @@ export function FileUpload() {
             removeCorporationEntityID();
             removeSourceAccountsObject();
             removeIndividualEntitiesObject();
+            removeLiabilityAccountsObject();
             refetchPaymentJson();
           }}
         >
@@ -182,12 +205,16 @@ export function FileUpload() {
         {_renderCorporationEntityStatus()}
       </p>
       <p>
-        <span>Source Account Status: </span>
+        <span>Source Accounts Status: </span>
         {_renderSourceAccountStatus()}
       </p>
       <p>
         <span>Individual Entities Status: </span>
         {_renderIndividualEntityStatus()}
+      </p>
+      <p>
+        <span>Liability Accounts Status: </span>
+        {_renderLiabilityAccountStatus()}
       </p>
     </>
   );
