@@ -21,6 +21,7 @@ const api = {
     const res = await axios.get(`${url}/merchants`, {
       params: options,
       headers: config,
+      validateStatus: () => true,
     });
     return res.data;
   },
@@ -34,6 +35,7 @@ const api = {
     const res = await axios.get(`${url}/entities`, {
       params: options,
       headers: config,
+      validateStatus: () => true,
     });
     return res.data;
   },
@@ -47,6 +49,7 @@ const api = {
     const res = await axios.get(`${url}/accounts`, {
       params: options,
       headers: config,
+      validateStatus: () => true,
     });
     return res.data;
   },
@@ -59,6 +62,7 @@ const api = {
   createEntity: async (options: any) => {
     const res = await axios.post(`${url}/entities`, options, {
       headers: config,
+      validateStatus: () => true,
     });
     return res.data;
   },
@@ -71,6 +75,7 @@ const api = {
   createAccount: async (options: any) => {
     const res = await axios.post(`${url}/accounts`, options, {
       headers: config,
+      validateStatus: () => true,
     });
     return res.data;
   },
@@ -83,6 +88,7 @@ const api = {
   makePayment: async (options: any) => {
     const res = await axios.post(`${url}/payments`, options, {
       headers: config,
+      validateStatus: () => true,
     });
     return res.data;
   },

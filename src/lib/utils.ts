@@ -41,7 +41,7 @@ export const readXmlAndConvertToJson = async (xmlFileUrl: string) => {
   const result = convert.xml2json(xml, { compact: true, spaces: 4 });
 
   // SLICE DATA FOR INITIAL TESTING
-  return JSON.parse(result).root.row.slice(0, 50);
+  return JSON.parse(result).root.row.slice(0, 2000);
 };
 
 /* Returns Corporation Entity ID */
@@ -373,7 +373,12 @@ export const createPaymentsPayload = async (
 ) => {
   const paymentsPayload = [];
   for (const payment of paymentsJson) {
-    const amount = payment.Amount._text;
+    const amount = Number(
+      payment.Amount._text
+        .slice(payment.Amount._text.indexOf("$") + 1)
+        .split(".")
+        .join("")
+    );
     const source = sourceAccountsObject[payment.Payor.AccountNumber._text];
     const individual_holder_id =
       individualEntitiesObject[
@@ -383,8 +388,20 @@ export const createPaymentsPayload = async (
       Student_Loan_Merchants_Object_By_PlaidId[payment.Payee.PlaidId._text];
     const destination =
       liabilityAccountsObject[`${individual_holder_id}-${merchant_id}`];
-    const description = payment.Employee.DunkinBranch._text; // Add Dunkin branch to payload description. Useful when creating reports.
+    const description = payment.Employee.DunkinBranch._text.slice(
+      payment.Employee.DunkinBranch._text.length - 10
+    ); // Add last 10 digits of Dunkin branch to payload description. Useful when creating reports.
     paymentsPayload.push({ amount, source, destination, description });
   }
   return paymentsPayload;
+};
+
+export const makePayments = async (paymentsPayload: any[]) => {
+  const promises = paymentsPayload.map((item) =>
+    fetchAndRetryIfNecessary(() =>
+      tokenBucket.acquireToken(() => api.makePayment(item))
+    )
+  );
+  const responses = await Promise.all(promises);
+  return responses;
 };

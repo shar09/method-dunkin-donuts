@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import {
   readXmlAndConvertToJson,
   createCorporationEntity,
@@ -6,6 +6,7 @@ import {
   createIndividualEntities,
   createLiabilityAccounts,
   createPaymentsPayload,
+  makePayments,
 } from "../lib/utils";
 import { useQuery } from "react-query";
 
@@ -13,6 +14,24 @@ import "../App.css";
 
 export function FileUpload() {
   const [xmlFileUrl, setXmlFileUrl] = useState("");
+  const [paymentsTotal, setPaymentsTotal] = useState("");
+  const [authorizePayments, setAuthorizePayments] = useState(false);
+  const [showPaymentsInitiation, setShowPaymentsInitiation] = useState(false);
+
+  function calculateTotalPaymentPayloadAmount(paymentPayload: any[]) {
+    const totalAmount = paymentPayload.reduce((accumulator: any, item: any) => {
+      accumulator = accumulator + item.amount;
+      return accumulator;
+    }, 0);
+    const amountToString = totalAmount.toString();
+    setPaymentsTotal(
+      `${amountToString.slice(
+        0,
+        amountToString.length - 2
+      )}.${amountToString.slice(amountToString.length - 2)}`
+    );
+    setShowPaymentsInitiation(true);
+  }
 
   const readXmlData = async () => {
     const payments_json = await readXmlAndConvertToJson(xmlFileUrl);
@@ -32,6 +51,7 @@ export function FileUpload() {
     enabled: false,
   });
 
+  // API Calls - Store responses in React Query state
   // ---------------------------------------------------------------------- //
 
   const fetchCorporationEntityID = async () => {
@@ -46,6 +66,7 @@ export function FileUpload() {
     remove: removeCorporationEntityID,
   } = useQuery(["corporationEntityID"], fetchCorporationEntityID, {
     enabled: paymentsJson?.length > 0,
+    refetchOnWindowFocus: false,
   });
 
   // ---------------------------------------------------------------------- //
@@ -62,6 +83,7 @@ export function FileUpload() {
     remove: removeSourceAccountsObject,
   } = useQuery(["sourceAccountsObject"], fetchSourceAccountsObject, {
     enabled: !!corporationEntityID,
+    refetchOnWindowFocus: false,
   });
 
   // ---------------------------------------------------------------------- //
@@ -78,6 +100,7 @@ export function FileUpload() {
     remove: removeIndividualEntitiesObject,
   } = useQuery(["individualEntitiesObject"], fetchIndividualEntitiesObject, {
     enabled: !!sourceAccountsObject,
+    refetchOnWindowFocus: false,
   });
 
   // ---------------------------------------------------------------------- //
@@ -97,10 +120,11 @@ export function FileUpload() {
     remove: removeLiabilityAccountsObject,
   } = useQuery(["liabilityAccountsObject"], fetchLiabilityAccountsObject, {
     enabled: !!individualEntitiesObject,
+    refetchOnWindowFocus: false,
   });
 
   // ---------------------------------------------------------------------- //
-  const fetchPaymentsPayloadObject = async () => {
+  const fetchPaymentsPayloadArray = async () => {
     return await createPaymentsPayload(
       paymentsJson,
       sourceAccountsObject,
@@ -110,13 +134,34 @@ export function FileUpload() {
   };
 
   const {
-    isFetching: isFetchingPaymentsPayloadObject,
-    isError: isErrorPaymentsPayloadObject,
-    isIdle: isIdlePaymentsPayloadObject,
-    data: paymentsPayloadObject,
-    remove: removePaymentsPayloadObject,
-  } = useQuery(["paymentsPayloadObject"], fetchPaymentsPayloadObject, {
+    isFetching: isFetchingPaymentsPayloadArray,
+    isError: isErrorPaymentsPayloadArray,
+    isIdle: isIdlePaymentsPayloadArray,
+    data: paymentsPayloadArray,
+    remove: removePaymentsPayloadArray,
+  } = useQuery(["paymentsPayloadArray"], fetchPaymentsPayloadArray, {
     enabled: !!liabilityAccountsObject,
+    refetchOnWindowFocus: false,
+    onSuccess: (data) => calculateTotalPaymentPayloadAmount(data),
+  });
+
+  // ---------------------------------------------------------------------- //
+
+  const fetchMakePaymentsResults = async () => {
+    const responses = await makePayments(paymentsPayloadArray!);
+    console.log("payments: ", responses);
+    return responses;
+  };
+
+  const {
+    isFetching: isFetchingMakePaymentsResults,
+    isError: isErrorMakePaymentsResults,
+    isIdle: isIdleMakePaymentsResults,
+    data: makePaymentsResults,
+    remove: removeMakePaymentsResults,
+  } = useQuery(["makePaymentsResults "], fetchMakePaymentsResults, {
+    enabled: !!paymentsPayloadArray && authorizePayments,
+    refetchOnWindowFocus: false,
   });
 
   // ---------------------------------------------------------------------- //
@@ -128,7 +173,7 @@ export function FileUpload() {
     if (paymentsJson?.length > 0)
       return (
         <>
-          <span>Succesful | </span>
+          <span style={{ color: "green" }}>Successful | </span>
           <span>Number of Payments in file: {paymentsJson?.length}</span>
         </>
       );
@@ -136,19 +181,22 @@ export function FileUpload() {
 
   const _renderCorporationEntityStatus = () => {
     if (isFetchingCorporationEntityID) return <span>Loading...</span>;
-    if (isErrorCorporationEntityID) return <span>Error</span>;
+    if (isErrorCorporationEntityID)
+      return <span style={{ color: "red" }}>Error</span>;
     if (isIdleCorporationEntityID) return <span>Idle</span>;
-    if (corporationEntityID) return <span>Succesful</span>;
+    if (corporationEntityID)
+      return <span style={{ color: "green" }}>Successful</span>;
   };
 
   const _renderSourceAccountStatus = () => {
     if (isFetchingSourceAccountsObject) return <span>Loading...</span>;
-    if (isErrorSourceAccountsObject) return <span>Error</span>;
+    if (isErrorSourceAccountsObject)
+      return <span style={{ color: "red" }}>Error</span>;
     if (isIdleSourceAccountsObject) return <span>Idle</span>;
     if (sourceAccountsObject)
       return (
         <>
-          <span>Succesful | </span>
+          <span style={{ color: "green" }}>Successful | </span>
           <span>
             Number of unique Dunkin source accounts in database:{" "}
             {Object.keys(sourceAccountsObject)?.length}
@@ -159,12 +207,13 @@ export function FileUpload() {
 
   const _renderIndividualEntityStatus = () => {
     if (isFetchingIndividualEntitiesObject) return <span>Loading...</span>;
-    if (isErrorIndividualEntitiesObject) return <span>Error</span>;
+    if (isErrorIndividualEntitiesObject)
+      return <span style={{ color: "red" }}>Error</span>;
     if (isIdleIndividualEntitiesObject) return <span>Idle</span>;
     if (individualEntitiesObject)
       return (
         <>
-          <span>Succesful | </span>
+          <span style={{ color: "green" }}>Successful | </span>
           <span>
             Number of individual entities in database:{" "}
             {Object.keys(individualEntitiesObject)?.length}
@@ -175,12 +224,13 @@ export function FileUpload() {
 
   const _renderLiabilityAccountStatus = () => {
     if (isFetchingLiabilityAccountsObject) return <span>Loading...</span>;
-    if (isErrorLiabilityAccountsObject) return <span>Error</span>;
+    if (isErrorLiabilityAccountsObject)
+      return <span style={{ color: "red" }}>Error</span>;
     if (isIdleLiabilityAccountsObject) return <span>Idle</span>;
     if (liabilityAccountsObject)
       return (
         <>
-          <span>Succesful | </span>
+          <span style={{ color: "green" }}>Successful | </span>
           <span>
             Number of liability accounts in database:{" "}
             {Object.keys(liabilityAccountsObject)?.length}
@@ -190,17 +240,31 @@ export function FileUpload() {
   };
 
   const _renderPaymentsPayloadStatus = () => {
-    if (isFetchingPaymentsPayloadObject) return <span>Loading...</span>;
-    if (isErrorPaymentsPayloadObject) return <span>Error</span>;
-    if (isIdlePaymentsPayloadObject) return <span>Idle</span>;
-    if (paymentsPayloadObject)
+    if (isFetchingPaymentsPayloadArray) return <span>Loading...</span>;
+    if (isErrorPaymentsPayloadArray)
+      return <span style={{ color: "red" }}>Error</span>;
+    if (isIdlePaymentsPayloadArray) return <span>Idle</span>;
+    if (paymentsPayloadArray)
       return (
         <>
-          <span>Succesful | </span>
+          <span style={{ color: "green" }}>Successful | </span>
           <span>
-            Number of payments to initiate:{" "}
-            {Object.keys(paymentsPayloadObject)?.length}
+            Number of payments to initiate: {paymentsPayloadArray?.length}
           </span>
+        </>
+      );
+  };
+
+  const _renderMakePaymentsResultsStatus = () => {
+    if (isFetchingMakePaymentsResults) return <span>Loading...</span>;
+    if (isErrorMakePaymentsResults)
+      return <span style={{ color: "red" }}>Error</span>;
+    if (isIdleMakePaymentsResults) return <span>Idle</span>;
+    if (makePaymentsResults)
+      return (
+        <>
+          <span style={{ color: "green" }}>Successful | </span>
+          <span>Generating CSV Report...</span>
         </>
       );
   };
@@ -220,14 +284,14 @@ export function FileUpload() {
           onChange={(e) => setXmlFileUrl(e.target.value)}
         />
         <button
-          className="url-submit-button"
+          className="btn url-submit-button"
           onClick={() => {
             removePaymentJson();
             removeCorporationEntityID();
             removeSourceAccountsObject();
             removeIndividualEntitiesObject();
             removeLiabilityAccountsObject();
-            removePaymentsPayloadObject();
+            removePaymentsPayloadArray();
             refetchPaymentJson();
           }}
         >
@@ -257,6 +321,37 @@ export function FileUpload() {
       <p>
         <span>Payments Payload Status: </span>
         {_renderPaymentsPayloadStatus()}
+      </p>
+      {showPaymentsInitiation ? (
+        <>
+          <p>Initiating payments worth ${paymentsTotal}</p>
+          <button
+            className="btn authorize-button"
+            onClick={() => setAuthorizePayments(true)}
+          >
+            Authorize
+          </button>
+          <button
+            className="btn cancel-button"
+            onClick={() => {
+              removePaymentJson();
+              removeCorporationEntityID();
+              removeSourceAccountsObject();
+              removeIndividualEntitiesObject();
+              removeLiabilityAccountsObject();
+              removePaymentsPayloadArray();
+              setShowPaymentsInitiation(false);
+            }}
+          >
+            Cancel
+          </button>
+        </>
+      ) : (
+        <Fragment />
+      )}
+      <p>
+        <span>Payments Results Status: </span>
+        {_renderMakePaymentsResultsStatus()}
       </p>
     </>
   );
