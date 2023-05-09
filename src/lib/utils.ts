@@ -40,8 +40,7 @@ export const readXmlAndConvertToJson = async (xmlFileUrl: string) => {
   const xml = await res.text();
   const result = convert.xml2json(xml, { compact: true, spaces: 4 });
 
-  // SLICE DATA FOR INITIAL TESTING
-  return JSON.parse(result).root.row.slice(0, 2000);
+  return JSON.parse(result).root.row;
 };
 
 /* Returns Corporation Entity ID */

@@ -9,6 +9,7 @@ import {
   makePayments,
 } from "../lib/utils";
 import { useQuery } from "react-query";
+import { CSVLink } from "react-csv";
 
 import "../App.css";
 
@@ -17,6 +18,10 @@ export function FileUpload() {
   const [paymentsTotal, setPaymentsTotal] = useState("");
   const [authorizePayments, setAuthorizePayments] = useState(false);
   const [showPaymentsInitiation, setShowPaymentsInitiation] = useState(false);
+
+  const [sourceAccountCSVData, setSourceAccountCSVData] = useState([[]]);
+  const [branchCSVData, setBranchCSVData] = useState([[]]);
+  const [allPaymentsCSV, setAllPaymentsCSV] = useState([[]]);
 
   function calculateTotalPaymentPayloadAmount(paymentPayload: any[]) {
     const totalAmount = paymentPayload.reduce((accumulator: any, item: any) => {
@@ -31,6 +36,107 @@ export function FileUpload() {
       )}.${amountToString.slice(amountToString.length - 2)}`
     );
     setShowPaymentsInitiation(true);
+  }
+
+  function generateCSV(paymentsResults: any) {
+    const sourceAccountTotals: any = [];
+    const branchTotalsArray: any = [];
+
+    const groupBySourceAccount: any = paymentsResults.reduce(
+      (accumulator: any, item: any) => {
+        accumulator[item.data.source] = [
+          ...(accumulator[item.data.source] || []),
+          item,
+        ];
+        return accumulator;
+      },
+      {}
+    );
+
+    const filteredGroupBySourceAccount = JSON.parse(
+      JSON.stringify(groupBySourceAccount)
+    );
+
+    const groupBySourceAccountValues: any = Object.values(
+      filteredGroupBySourceAccount
+    );
+
+    for (const responseArray of groupBySourceAccountValues) {
+      const sourceTotals = responseArray.reduce(
+        (accumulator: any, item: any) => {
+          accumulator = accumulator + item.data.amount;
+          return accumulator;
+        },
+        0
+      );
+      const amountToString = sourceTotals.toString();
+      sourceAccountTotals.push({
+        source: responseArray[0].data.source,
+        totalTransactionAmount: `${amountToString.slice(
+          0,
+          amountToString.length - 2
+        )}.${amountToString.slice(amountToString.length - 2)}`,
+      });
+    }
+
+    const groupByBranch: any = paymentsResults.reduce(
+      (accumulator: any, item: any) => {
+        accumulator[item.data.description] = [
+          ...(accumulator[item.data.description] || []),
+          item,
+        ];
+        return accumulator;
+      },
+      {}
+    );
+
+    const filteredGroupByBranch = JSON.parse(JSON.stringify(groupByBranch));
+
+    const groupByBranchValues: any = Object.values(filteredGroupByBranch);
+
+    for (const responseArray of groupByBranchValues) {
+      const branchTotals = responseArray.reduce(
+        (accumulator: any, item: any) => {
+          accumulator = accumulator + item.data.amount;
+          return accumulator;
+        },
+        0
+      );
+      const amountToString = branchTotals.toString();
+      branchTotalsArray.push({
+        branchIDLast10Digits: responseArray[0].data.description,
+        totalTransactionAmount: `${amountToString.slice(
+          0,
+          amountToString.length - 2
+        )}.${amountToString.slice(amountToString.length - 2)}`,
+      });
+    }
+
+    const allPaymentsCSV = paymentsResults.map((result: any) => {
+      const amountToString = result.data?.amount?.toString();
+      let paymentData: any = {
+        success: result.success,
+        message: result.message,
+      };
+
+      if (amountToString) {
+        paymentData = {
+          ...paymentData,
+          source: result.data?.source,
+          destination: result.data?.destination,
+          amount: `${amountToString?.slice(
+            0,
+            amountToString?.length - 2
+          )}.${amountToString?.slice(amountToString?.length - 2)}`,
+        };
+      }
+
+      return paymentData;
+    });
+
+    setSourceAccountCSVData(sourceAccountTotals);
+    setBranchCSVData(branchTotalsArray);
+    setAllPaymentsCSV(allPaymentsCSV);
   }
 
   const readXmlData = async () => {
@@ -148,9 +254,7 @@ export function FileUpload() {
   // ---------------------------------------------------------------------- //
 
   const fetchMakePaymentsResults = async () => {
-    const responses = await makePayments(paymentsPayloadArray!);
-    console.log("payments: ", responses);
-    return responses;
+    return await makePayments(paymentsPayloadArray!);
   };
 
   const {
@@ -162,6 +266,7 @@ export function FileUpload() {
   } = useQuery(["makePaymentsResults "], fetchMakePaymentsResults, {
     enabled: !!paymentsPayloadArray && authorizePayments,
     refetchOnWindowFocus: false,
+    onSuccess: (data) => generateCSV(data),
   });
 
   // ---------------------------------------------------------------------- //
@@ -260,7 +365,7 @@ export function FileUpload() {
     if (isErrorMakePaymentsResults)
       return <span style={{ color: "red" }}>Error</span>;
     if (isIdleMakePaymentsResults) return <span>Idle</span>;
-    if (makePaymentsResults)
+    if (!!makePaymentsResults)
       return (
         <>
           <span style={{ color: "green" }}>Successful | </span>
@@ -327,7 +432,10 @@ export function FileUpload() {
           <p>Initiating payments worth ${paymentsTotal}</p>
           <button
             className="btn authorize-button"
-            onClick={() => setAuthorizePayments(true)}
+            onClick={() => {
+              setAuthorizePayments(true);
+              setShowPaymentsInitiation(false);
+            }}
           >
             Authorize
           </button>
@@ -353,6 +461,33 @@ export function FileUpload() {
         <span>Payments Results Status: </span>
         {_renderMakePaymentsResultsStatus()}
       </p>
+      {sourceAccountCSVData.length > 1 && branchCSVData.length > 1 && (
+        <>
+          <CSVLink
+            asyncOnClick={true}
+            data={sourceAccountCSVData}
+            filename="dunkin-source-account-totals"
+          >
+            CSV Source Account Totals
+          </CSVLink>
+          <br />
+          <CSVLink
+            asyncOnClick={true}
+            data={branchCSVData}
+            filename="dunkin-branch-totals"
+          >
+            CSV Branch Totals
+          </CSVLink>
+          <br />
+          <CSVLink
+            asyncOnClick={true}
+            data={allPaymentsCSV}
+            filename="dunkin-all-payments"
+          >
+            CSV All Payments
+          </CSVLink>
+        </>
+      )}
     </>
   );
 }
