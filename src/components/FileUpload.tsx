@@ -37,6 +37,7 @@ export function FileUpload() {
     isIdle: isIdlePaymentsJson,
     data: paymentsJson,
     refetch: refetchPaymentJson,
+    remove: removePaymentJson,
   } = useQuery(["paymentsJson"], readXmlData, {
     refetchOnWindowFocus: false,
     enabled: false,
@@ -51,13 +52,10 @@ export function FileUpload() {
     isError: isErrorCorporationEntityID,
     isIdle: isIdleCorporationEntityID,
     data: corporationEntityID,
-  } = useQuery(
-    ["corporationEntityID", paymentsJson],
-    fetchCorporationEntityID,
-    {
-      enabled: paymentsJson?.length > 0,
-    }
-  );
+    remove: removecorporationEntityID,
+  } = useQuery(["corporationEntityID"], fetchCorporationEntityID, {
+    enabled: paymentsJson?.length > 0,
+  });
 
   const _renderXmlFileStatus = () => {
     if (isFetchingPaymentsJson) return <span>Loading...</span>;
@@ -89,7 +87,11 @@ export function FileUpload() {
         />
         <button
           className="url-submit-button"
-          onClick={() => refetchPaymentJson()}
+          onClick={() => {
+            removePaymentJson();
+            removecorporationEntityID();
+            refetchPaymentJson();
+          }}
         >
           Submit
         </button>
