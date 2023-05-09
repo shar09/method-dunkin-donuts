@@ -322,13 +322,6 @@ export const createLiabilityAccounts = async (
           studentLoanMerchant?.mch_id;
     }
 
-    console.log(
-      "merchant_id: ",
-      merchantId,
-      ":::::",
-      payment.Payee.PlaidId._text
-    );
-
     const entityId =
       individualEntitiesObject[
         `${payment.Employee.FirstName._text}-${payment.Employee.LastName._text}`
