@@ -52,10 +52,14 @@ export const readXmlAndConvertToJson = async (xmlFileUrl: string) => {
 };
 
 export const createCorporationEntity = async (firstPaymentJson: any) => {
-  const existingEntities = await api.getEntities({
-    type: "c_corporation",
-    status: "active",
-  });
+  const existingEntities = await fetchAndRetryIfNecessary(() =>
+    tokenBucket.acquireToken(() =>
+      api.getEntities({
+        type: "c_corporation",
+        status: "active",
+      })
+    )
+  );
 
   const getExistingCorporationID = () => {
     // All Dunkin corporation entities
@@ -83,22 +87,26 @@ export const createCorporationEntity = async (firstPaymentJson: any) => {
 
   // Create Corporation Entity for Dunkins if not already existing
   if (!corporationEntityId) {
-    const response = await api.createEntity({
-      type: "c_corporation",
-      corporation: {
-        name: "Dunkin' Donuts LLC",
-        dba: "Dunkin' Donuts",
-        ein: "32120240",
-        owners: [],
-      },
-      address: {
-        line1: "999 Hayes Lights",
-        line2: null,
-        city: "Kerlukemouth",
-        state: "IA",
-        zip: "50613", // Note: Using real Iowa state zip code isntead of zip code from xml file
-      },
-    });
+    const response = await fetchAndRetryIfNecessary(() =>
+      tokenBucket.acquireToken(() =>
+        api.createEntity({
+          type: "c_corporation",
+          corporation: {
+            name: "Dunkin' Donuts LLC",
+            dba: "Dunkin' Donuts",
+            ein: "32120240",
+            owners: [],
+          },
+          address: {
+            line1: "999 Hayes Lights",
+            line2: null,
+            city: "Kerlukemouth",
+            state: "IA",
+            zip: "50613", // Note: Using real Iowa state zip code isntead of zip code from xml file
+          },
+        })
+      )
+    );
     return response.data.id; // corporation entity id
   } else {
     return corporationEntityId;
