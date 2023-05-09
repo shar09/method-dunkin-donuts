@@ -11,8 +11,7 @@ const tokenBucket = new TokenBucketRateLimiter({
 });
 
 let CORPORATION_ENTITY_ID: any;
-export let PAYMENTS_JSON: any = {};
-let FIRST_PAYMENT_JSON: any;
+let PAYMENTS_JSON: any = {};
 let SOURCE_ACCOUNTS_OBJECT: any;
 let EXISTING_INDIVIDUAL_ENTITIES_OBJECT: any = {};
 let EXISTING_LIABILITY_ACCOUNTS_OBJECT: any = {};
@@ -21,15 +20,16 @@ function sleep(milliseconds: number) {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-// mm-dd-yyyy to yyyy-mm-dd
+// Convert date from mm-dd-yyyy to yyyy-mm-dd
 function formatDate(date: string) {
   let dateArray: any = date.split("-").reverse();
-  const tmp = dateArray[2];
+  const temp = dateArray[2];
   dateArray[2] = dateArray[1];
-  dateArray[1] = tmp;
+  dateArray[1] = temp;
   dateArray = dateArray.join("-");
 }
 
+// Sort by latest created date
 function compareFn(a: any, b: any) {
   if (a["created_at"] > b["created_at"]) {
     return -1;
@@ -41,40 +41,34 @@ function compareFn(a: any, b: any) {
   return 0;
 }
 
-export const readUrl = async () => {
-  const url =
-    "https://file.notion.so/f/s/8c08a999-4b9e-44b8-bc17-bbaf8c219101/dunkin.xml?id=377557b0-66f2-45d7-a159-b2381391bfa2&table=block&spaceId=d0d5787b-ff93-48d4-bb8d-bffd9edc42e4&expirationTimestamp=1683606673925&signature=wxWPW6ruqoP3NFqmv45xGJqtgZ1XCDO3eOWv27_c_Bk&downloadName=dunkin.xml";
+export const readXmlAndConvertToJson = async (xmlFileUrl: string) => {
+  const url = xmlFileUrl;
   const res = await fetch(url);
   const xml = await res.text();
   const result = convert.xml2json(xml, { compact: true, spaces: 4 });
-  // console.log(result);
-  FIRST_PAYMENT_JSON = JSON.parse(result).root.row[0];
-  // console.log(FIRST_PAYMENT_FROM_XML);
-  // SLICE DATA FOR INITIAL TESTING
-  PAYMENTS_JSON = JSON.parse(result).root.row.slice(0, 50);
 
-  return PAYMENTS_JSON;
+  // SLICE DATA FOR INITIAL TESTING
+  return JSON.parse(result).root.row.slice(0, 50);
 };
 
-export const createCorporateEntity = async () => {
+export const createCorporationEntity = async (firstPaymentJson: any) => {
   const existingEntities = await api.getEntities({
     type: "c_corporation",
     status: "active",
   });
 
   const getExistingCorporationID = () => {
+    // All Dunkin corporation entities
     const allDunkinExistingEntities = existingEntities.data?.filter(
       (entity: any) =>
-        entity.corporation.ein === FIRST_PAYMENT_JSON.Payor.EIN._text
+        entity.corporation.ein === firstPaymentJson.Payor.EIN._text
     );
 
-    // console.log("all existing dunkin entities: ", allDunkinExistingEntities);
-
+    // Sort Dunkin corporation entites in latest created order
     const sortAllDunkinExistingEntities =
       allDunkinExistingEntities.sort(compareFn);
 
-    // console.log("sorted dunkin entities: ", sortAllDunkinExistingEntities);
-
+    // Return latest created Dunkin corporation entity
     const latestDunkinEntity: any = sortAllDunkinExistingEntities?.filter(
       (element: any, index: number, array: any[]) =>
         array.findIndex(
@@ -82,13 +76,13 @@ export const createCorporateEntity = async () => {
         ) === index
     );
 
-    // console.log("latest dunkin entity: ", latestDunkinEntity);
-
     return latestDunkinEntity[0]?.id;
   };
 
-  // Create Corporate Entity for Dunkins if not already existing
-  if (!getExistingCorporationID()) {
+  const corporationEntityId = getExistingCorporationID();
+
+  // Create Corporation Entity for Dunkins if not already existing
+  if (!corporationEntityId) {
     const response = await api.createEntity({
       type: "c_corporation",
       corporation: {
@@ -105,12 +99,10 @@ export const createCorporateEntity = async () => {
         zip: "50613", // Note: Using real Iowa state zip code isntead of zip code from xml file
       },
     });
-
-    // Wait for entity to be created
-    await sleep(5000);
+    return response.data.id; // corporation entity id
+  } else {
+    return corporationEntityId;
   }
-
-  CORPORATION_ENTITY_ID = getExistingCorporationID();
 };
 
 // Create source payment accounts

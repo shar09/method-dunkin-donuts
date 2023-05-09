@@ -1,38 +1,51 @@
-.App {
-  text-align: center;
-}
-
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
-}
-
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
+.navbar {
+  height: 20px;
+  background-color: #efefef;
   display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
+  justify-content: space-between;
+  padding: 20px;
 }
 
-.App-link {
-  color: #61dafb;
+.brand-text {
+  text-transform: uppercase;
+  font-weight: bold;
+  font-size: 18px;
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+.dunkin-donuts-brand {
+  color: orangered
+}
+
+.method-brand {
+  color: green;
+}
+
+.url-input-container {
+  padding: 20px;
+}
+
+.url-label {
+  margin-right: 20px;
+  color: #23233F;
+  font-weight: bold;
+  font-size: 15px;
+}
+
+.url-input {
+  height: 32px;
+  width: 750px;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  font-size: 15px;
+  margin-right: 20px;
+}
+
+.url-submit-button {
+  border: none;
+  padding: 14px;
+  border-radius: 5px;
+  background-color: green;
+  cursor: pointer;
+  font-weight: bold;
+  color: #fff;
 }
