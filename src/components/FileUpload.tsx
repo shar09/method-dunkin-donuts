@@ -5,6 +5,7 @@ import {
   createSourceAccounts,
   createIndividualEntities,
   createLiabilityAccounts,
+  createPaymentsPayload,
 } from "../lib/utils";
 import { useQuery } from "react-query";
 
@@ -99,6 +100,26 @@ export function FileUpload() {
   });
 
   // ---------------------------------------------------------------------- //
+  const fetchPaymentsPayloadObject = async () => {
+    return await createPaymentsPayload(
+      paymentsJson,
+      sourceAccountsObject,
+      individualEntitiesObject,
+      liabilityAccountsObject
+    );
+  };
+
+  const {
+    isFetching: isFetchingPaymentsPayloadObject,
+    isError: isErrorPaymentsPayloadObject,
+    isIdle: isIdlePaymentsPayloadObject,
+    data: paymentsPayloadObject,
+    remove: removePaymentsPayloadObject,
+  } = useQuery(["paymentsPayloadObject"], fetchPaymentsPayloadObject, {
+    enabled: !!liabilityAccountsObject,
+  });
+
+  // ---------------------------------------------------------------------- //
 
   const _renderXmlFileStatus = () => {
     if (isFetchingPaymentsJson) return <span>Loading...</span>;
@@ -168,6 +189,22 @@ export function FileUpload() {
       );
   };
 
+  const _renderPaymentsPayloadStatus = () => {
+    if (isFetchingPaymentsPayloadObject) return <span>Loading...</span>;
+    if (isErrorPaymentsPayloadObject) return <span>Error</span>;
+    if (isIdlePaymentsPayloadObject) return <span>Idle</span>;
+    if (paymentsPayloadObject)
+      return (
+        <>
+          <span>Succesful | </span>
+          <span>
+            Number of payments to initiate:{" "}
+            {Object.keys(paymentsPayloadObject)?.length}
+          </span>
+        </>
+      );
+  };
+
   return (
     <>
       <div className="navbar">
@@ -190,6 +227,7 @@ export function FileUpload() {
             removeSourceAccountsObject();
             removeIndividualEntitiesObject();
             removeLiabilityAccountsObject();
+            removePaymentsPayloadObject();
             refetchPaymentJson();
           }}
         >
@@ -215,6 +253,10 @@ export function FileUpload() {
       <p>
         <span>Liability Accounts Status: </span>
         {_renderLiabilityAccountStatus()}
+      </p>
+      <p>
+        <span>Payments Payload Status: </span>
+        {_renderPaymentsPayloadStatus()}
       </p>
     </>
   );

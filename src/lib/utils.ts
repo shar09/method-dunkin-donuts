@@ -5,6 +5,8 @@ import {
   fetchAndRetryIfNecessary,
 } from "./api-throttling";
 
+let Student_Loan_Merchants_Object_By_PlaidId: any;
+
 const tokenBucket = new TokenBucketRateLimiter({
   maxRequests: 600,
   maxRequestWindowMS: 60000,
@@ -315,6 +317,10 @@ export const createLiabilityAccounts = async (
         item.types.includes("student_loan")
       );
       merchantId = studentLoanMerchant?.mch_id;
+      // If merchant id is valid, add to merchant ids object
+      if (merchantId)
+        studentLoanMerchantsObjectByPlaidId[payment.Payee.PlaidId._text] =
+          studentLoanMerchant?.mch_id;
     }
 
     const entityId =
@@ -351,7 +357,34 @@ export const createLiabilityAccounts = async (
     ] = response.data.id;
   }
 
+  // Add to global variable, to be accessed later when initiating payments
+  Student_Loan_Merchants_Object_By_PlaidId =
+    studentLoanMerchantsObjectByPlaidId;
+
   return existingLiabilityAccountsObject;
 };
 
-// Initiate payments
+/* Returns an array of payment payloads */
+export const createPaymentsPayload = async (
+  paymentsJson: any,
+  sourceAccountsObject: any,
+  individualEntitiesObject: any,
+  liabilityAccountsObject: any
+) => {
+  const paymentsPayload = [];
+  for (const payment of paymentsJson) {
+    const amount = payment.Amount._text;
+    const source = sourceAccountsObject[payment.Payor.AccountNumber._text];
+    const individual_holder_id =
+      individualEntitiesObject[
+        `${payment.Employee.FirstName._text}-${payment.Employee.LastName._text}`
+      ];
+    const merchant_id =
+      Student_Loan_Merchants_Object_By_PlaidId[payment.Payee.PlaidId._text];
+    const destination =
+      liabilityAccountsObject[`${individual_holder_id}-${merchant_id}`];
+    const description = payment.Employee.DunkinBranch._text; // Add Dunkin branch to payload description. Useful when creating reports.
+    paymentsPayload.push({ amount, source, destination, description });
+  }
+  return paymentsPayload;
+};
