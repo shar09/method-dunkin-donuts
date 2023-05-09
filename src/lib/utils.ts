@@ -142,12 +142,12 @@ export const createSourceAccounts = async (
 
   // Group payments from same source account into single array
   const groupPaymentsBySource: any[] = Object.values(
-    paymentsJson.reduce((acc: any, item: any) => {
-      acc[item.Payor.DunkinId._text] = [
-        ...(acc[item.Payor.DunkinId._text] || []),
+    paymentsJson.reduce((accumulator: any, item: any) => {
+      accumulator[item.Payor.DunkinId._text] = [
+        ...(accumulator[item.Payor.DunkinId._text] || []),
         item,
       ];
-      return acc;
+      return accumulator;
     }, {})
   );
 
@@ -192,68 +192,53 @@ export const createSourceAccounts = async (
   return sourceAccountsObject;
 };
 
-// Create Individual Entities - Hardcode phone number
-export const createIndividualEntities = async () => {
+/* Returns an object of individual entities with key: value format first_name-last_name: entity_id */
+export const createIndividualEntities = async (paymentsJson: any) => {
+  const existingIndividualEntitiesObject: any = {};
+  const createEntityPromises = [];
+
+  // Group all payments of an employee into single array
   const groupByEmployee: any = Object.values(
-    PAYMENTS_JSON.reduce((acc: any, item: any) => {
-      acc[item.Employee.DunkinId._text] = [
-        ...(acc[item.Employee.DunkinId._text] || []),
+    paymentsJson.reduce((accumulator: any, item: any) => {
+      accumulator[item.Employee.DunkinId._text] = [
+        ...(accumulator[item.Employee.DunkinId._text] || []),
         item,
       ];
-      return acc;
+      return accumulator;
     }, {})
   );
 
-  console.log("group by employee: ", groupByEmployee);
-
   // Create Individual Entities if not existing
-  // - Get all existing indiviual entities - no duplicates
+  // Get all existing indiviual entities - Assuming there are no duplicates
   const existingEntities = await api.getEntities({
     type: "individual",
     status: "active",
   });
 
-  // existingEntities.data is an array [{},{},{},] - 1000 objs
-  // Convert to hashmap with key firstname-lastname-dob {} - 1000 keys
-
   if (existingEntities.data.length > 0) {
     for (let entity of existingEntities.data) {
-      // TODO: Using simple check if entity has valid capabilities. Update to proper check.
+      // TODO: Using simple check if entity has valid capabilities. Update to proper check in the future.
       if (entity.capabilities.length > 2) {
-        EXISTING_INDIVIDUAL_ENTITIES_OBJECT[
+        existingIndividualEntitiesObject[
           `${entity.individual.first_name}-${entity.individual.last_name}`
         ] = entity.id;
       }
     }
   }
 
-  console.log(
-    Object.keys(EXISTING_INDIVIDUAL_ENTITIES_OBJECT).length,
-    ":",
-    groupByEmployee.length
-  );
-
-  const createEntityPromises = [];
-
-  console.log("existing entities: ", EXISTING_INDIVIDUAL_ENTITIES_OBJECT);
-  // Sleep 1 min before making api calls for creating individual entities
-  // await sleep(60000);
   for (let paymentsArray of groupByEmployee) {
-    // Check if employee is already in existing entities
+    // Check if employee is already in existing entities otherwise create entity
     if (
-      !EXISTING_INDIVIDUAL_ENTITIES_OBJECT[
+      !existingIndividualEntitiesObject[
         `${paymentsArray[0].Employee.FirstName._text}-${paymentsArray[0].Employee.LastName._text}`
       ]
     ) {
-      console.log(
-        `${paymentsArray[0].Employee.FirstName._text}-${paymentsArray[0].Employee.LastName._text}`
-      );
       createEntityPromises.push({
         type: "individual",
         individual: {
           first_name: paymentsArray[0].Employee.FirstName._text,
           last_name: paymentsArray[0].Employee.LastName._text,
-          phone: "15121231111",
+          phone: "15121231111", // Note: Hard-code phone number to get correct capabilities for entity
           dob: formatDate(paymentsArray[0].Employee.DOB._text),
         },
       });
@@ -266,12 +251,14 @@ export const createIndividualEntities = async () => {
     )
   );
   const responses = await Promise.all(promises);
-  console.log("entity responses: ", responses);
+
   for (const response of responses) {
-    EXISTING_INDIVIDUAL_ENTITIES_OBJECT[
+    existingIndividualEntitiesObject[
       `${response.data.individual.first_name}-${response.data.individual.last_name}`
     ] = response.data.id;
   }
+
+  return existingIndividualEntitiesObject;
 };
 
 // Create Destination payment accounts

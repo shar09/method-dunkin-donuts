@@ -78,6 +78,22 @@ export function FileUpload() {
 
   // ---------------------------------------------------------------------- //
 
+  const fetchIndividualEntitiesObject = async () => {
+    return await createIndividualEntities(paymentsJson);
+  };
+
+  const {
+    isFetching: isFetchingIndividualEntitiesObject,
+    isError: isErrorIndividualEntitiesObject,
+    isIdle: isIdleIndividualEntitiesObject,
+    data: individualEntitiesObject,
+    remove: removeIndividualEntitiesObject,
+  } = useQuery(["individualEntitiesObject"], fetchIndividualEntitiesObject, {
+    enabled: !!sourceAccountsObject,
+  });
+
+  // ---------------------------------------------------------------------- //
+
   const _renderXmlFileStatus = () => {
     if (isFetchingPaymentsJson) return <span>Loading...</span>;
     if (isErrorPaymentsJson) return <span>Error</span>;
@@ -107,8 +123,24 @@ export function FileUpload() {
         <>
           <span>Succesful | </span>
           <span>
-            Number of source accounts in file:{" "}
+            Number of unique Dunkin source accounts in database:{" "}
             {Object.keys(sourceAccountsObject)?.length}
+          </span>
+        </>
+      );
+  };
+
+  const _renderIndividualEntityStatus = () => {
+    if (isFetchingIndividualEntitiesObject) return <span>Loading...</span>;
+    if (isErrorIndividualEntitiesObject) return <span>Error</span>;
+    if (isIdleIndividualEntitiesObject) return <span>Idle</span>;
+    if (individualEntitiesObject)
+      return (
+        <>
+          <span>Succesful | </span>
+          <span>
+            Number of individual entities in database:{" "}
+            {Object.keys(individualEntitiesObject)?.length}
           </span>
         </>
       );
@@ -133,6 +165,8 @@ export function FileUpload() {
           onClick={() => {
             removePaymentJson();
             removeCorporationEntityID();
+            removeSourceAccountsObject();
+            removeIndividualEntitiesObject();
             refetchPaymentJson();
           }}
         >
@@ -150,6 +184,10 @@ export function FileUpload() {
       <p>
         <span>Source Account Status: </span>
         {_renderSourceAccountStatus()}
+      </p>
+      <p>
+        <span>Individual Entities Status: </span>
+        {_renderIndividualEntityStatus()}
       </p>
     </>
   );
