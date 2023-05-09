@@ -58,9 +58,6 @@ function getMillisToSleep(retryHeaderString: string) {
   return millisToSleep;
 }
 
-// getMillisToSleep("4"); // => 4000
-// getMillisToSleep("Mon, 29 Mar 2021 04:58:00 GMT"); // => 4000
-
 export async function fetchAndRetryIfNecessary(callAPIFn: any): Promise<any> {
   const response = await callAPIFn();
   if (response.status === 429) {
