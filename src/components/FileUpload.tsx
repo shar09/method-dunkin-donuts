@@ -25,6 +25,7 @@ export function FileUpload() {
 
   const [xmlFileUrl, setXmlFileUrl] = useState("");
 
+  // ---------------------------------------------------------------------- //
   const readXmlData = async () => {
     const payments_json = await readXmlAndConvertToJson(xmlFileUrl);
     setXmlFileUrl("");
@@ -43,6 +44,8 @@ export function FileUpload() {
     enabled: false,
   });
 
+  // ---------------------------------------------------------------------- //
+
   const fetchCorporationEntityID = async () => {
     return await createCorporationEntity(paymentsJson[0]);
   };
@@ -52,16 +55,40 @@ export function FileUpload() {
     isError: isErrorCorporationEntityID,
     isIdle: isIdleCorporationEntityID,
     data: corporationEntityID,
-    remove: removecorporationEntityID,
+    remove: removeCorporationEntityID,
   } = useQuery(["corporationEntityID"], fetchCorporationEntityID, {
     enabled: paymentsJson?.length > 0,
   });
+
+  // ---------------------------------------------------------------------- //
+
+  const fetchSourceAccountsObject = async () => {
+    return await createSourceAccounts(paymentsJson, corporationEntityID);
+  };
+
+  const {
+    isFetching: isFetchingSourceAccountsObject,
+    isError: isErrorSourceAccountsObject,
+    isIdle: isIdleSourceAccountsObject,
+    data: sourceAccountsObject,
+    remove: removeSourceAccountsObject,
+  } = useQuery(["sourceAccountsObject"], fetchSourceAccountsObject, {
+    enabled: !!corporationEntityID,
+  });
+
+  // ---------------------------------------------------------------------- //
 
   const _renderXmlFileStatus = () => {
     if (isFetchingPaymentsJson) return <span>Loading...</span>;
     if (isErrorPaymentsJson) return <span>Error</span>;
     if (isIdlePaymentsJson) return <span>Idle</span>;
-    if (paymentsJson?.length > 0) return <span>Succesful</span>;
+    if (paymentsJson?.length > 0)
+      return (
+        <>
+          <span>Succesful | </span>
+          <span>Number of Payments in file: {paymentsJson?.length}</span>
+        </>
+      );
   };
 
   const _renderCorporationEntityStatus = () => {
@@ -69,6 +96,22 @@ export function FileUpload() {
     if (isErrorCorporationEntityID) return <span>Error</span>;
     if (isIdleCorporationEntityID) return <span>Idle</span>;
     if (corporationEntityID) return <span>Succesful</span>;
+  };
+
+  const _renderSourceAccountStatus = () => {
+    if (isFetchingSourceAccountsObject) return <span>Loading...</span>;
+    if (isErrorSourceAccountsObject) return <span>Error</span>;
+    if (isIdleSourceAccountsObject) return <span>Idle</span>;
+    if (sourceAccountsObject)
+      return (
+        <>
+          <span>Succesful | </span>
+          <span>
+            Number of source accounts in file:{" "}
+            {Object.keys(sourceAccountsObject)?.length}
+          </span>
+        </>
+      );
   };
 
   return (
@@ -89,7 +132,7 @@ export function FileUpload() {
           className="url-submit-button"
           onClick={() => {
             removePaymentJson();
-            removecorporationEntityID();
+            removeCorporationEntityID();
             refetchPaymentJson();
           }}
         >
@@ -103,6 +146,10 @@ export function FileUpload() {
       <p>
         <span>Corporation Entity Status: </span>
         {_renderCorporationEntityStatus()}
+      </p>
+      <p>
+        <span>Source Account Status: </span>
+        {_renderSourceAccountStatus()}
       </p>
     </>
   );

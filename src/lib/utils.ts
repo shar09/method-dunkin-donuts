@@ -16,10 +16,6 @@ let SOURCE_ACCOUNTS_OBJECT: any;
 let EXISTING_INDIVIDUAL_ENTITIES_OBJECT: any = {};
 let EXISTING_LIABILITY_ACCOUNTS_OBJECT: any = {};
 
-function sleep(milliseconds: number) {
-  return new Promise((resolve) => setTimeout(resolve, milliseconds));
-}
-
 // Convert date from mm-dd-yyyy to yyyy-mm-dd
 function formatDate(date: string) {
   let dateArray: any = date.split("-").reverse();
@@ -41,6 +37,7 @@ function compareFn(a: any, b: any) {
   return 0;
 }
 
+/* Returns Payments from XML file in JSON format */
 export const readXmlAndConvertToJson = async (xmlFileUrl: string) => {
   const url = xmlFileUrl;
   const res = await fetch(url);
@@ -51,6 +48,7 @@ export const readXmlAndConvertToJson = async (xmlFileUrl: string) => {
   return JSON.parse(result).root.row.slice(0, 50);
 };
 
+/* Returns Corporation Entity ID */
 export const createCorporationEntity = async (firstPaymentJson: any) => {
   const existingEntities = await fetchAndRetryIfNecessary(() =>
     tokenBucket.acquireToken(() =>
@@ -72,11 +70,11 @@ export const createCorporationEntity = async (firstPaymentJson: any) => {
     const sortAllDunkinExistingEntities =
       allDunkinExistingEntities.sort(compareFn);
 
-    // Return latest created Dunkin corporation entity
+    // Get latest created Dunkin corporation entity
     const latestDunkinEntity: any = sortAllDunkinExistingEntities?.filter(
-      (element: any, index: number, array: any[]) =>
+      (elementI: any, index: number, array: any[]) =>
         array.findIndex(
-          (obj) => obj.corporation.name === element.corporation.name
+          (elementJ) => elementJ.corporation.name === elementI.corporation.name
         ) === index
     );
 
@@ -113,23 +111,38 @@ export const createCorporationEntity = async (firstPaymentJson: any) => {
   }
 };
 
-// Create source payment accounts
-export const createSourceAccounts = async () => {
-  const allExistingSourceAccounts = await api.getAccounts({
-    type: "ach",
-    status: "active",
-  });
+/* Returns an object of source payment accounts with key: value format source_account_number: source_account_id */
+export const createSourceAccounts = async (
+  paymentsJson: any[],
+  corporationEntityID: string
+) => {
+  const allSourceAccountsInPaymentsJson = [];
+  let sourceAccountsObject = {};
 
+  const allExistingSourceAccounts = await fetchAndRetryIfNecessary(() =>
+    tokenBucket.acquireToken(() =>
+      api.getAccounts({
+        type: "ach",
+        status: "active",
+      })
+    )
+  );
+
+  // Sort existing source accounts in latest created order
   const sortAllExistingSourceAccounts =
     allExistingSourceAccounts.data?.sort(compareFn);
 
+  // Get latest unique source accounts
   const uniqueSourceAccounts = sortAllExistingSourceAccounts?.filter(
-    (element: any, index: number, array: any[]) =>
-      array.findIndex((obj) => obj.ach.number === element.ach.number) === index
+    (elementI: any, index: number, array: any[]) =>
+      array.findIndex(
+        (elementJ) => elementJ.ach.number === elementI.ach.number
+      ) === index
   );
 
-  const groupPaymentBySource: any[] = Object.values(
-    PAYMENTS_JSON.reduce((acc: any, item: any) => {
+  // Group payments from same source account into single array
+  const groupPaymentsBySource: any[] = Object.values(
+    paymentsJson.reduce((acc: any, item: any) => {
       acc[item.Payor.DunkinId._text] = [
         ...(acc[item.Payor.DunkinId._text] || []),
         item,
@@ -138,49 +151,45 @@ export const createSourceAccounts = async () => {
     }, {})
   );
 
-  // console.log("grouped by source: ", groupPaymentBySource);
-
-  const allSourceAccountsInPaymentsJson = [];
-  for (let paymentsArray of groupPaymentBySource) {
+  for (let paymentsArray of groupPaymentsBySource) {
     allSourceAccountsInPaymentsJson.push(paymentsArray[0]);
   }
 
-  // console.log("allsource: ", allSourceAccountsInPaymentsJson);
-  // console.log("existings source: ", uniqueSourceAccounts);
-
   for (let account of allSourceAccountsInPaymentsJson) {
+    // Find source account from payments_json is in existing source accounts (i.e. already created) AND verify if corporation entity id is matching
     const existingSourceAccount = uniqueSourceAccounts.find(
       (existingAccount: any) =>
         existingAccount.ach.number === account.Payor.AccountNumber._text &&
-        existingAccount.holder_id === CORPORATION_ENTITY_ID
+        existingAccount.holder_id === corporationEntityID
     );
 
-    // console.log("existing source: ", existingSourceAccount);
     // Create Source Account if not already existing
     if (!existingSourceAccount) {
-      const response = await api.createAccount({
-        holder_id: CORPORATION_ENTITY_ID,
-        ach: {
-          routing: account.Payor.ABARouting._text,
-          number: account.Payor.AccountNumber._text,
-          type: "checking",
-        },
-      });
+      const response = await fetchAndRetryIfNecessary(() =>
+        tokenBucket.acquireToken(() =>
+          api.createAccount({
+            holder_id: corporationEntityID,
+            ach: {
+              routing: account.Payor.ABARouting._text,
+              number: account.Payor.AccountNumber._text,
+              type: "checking",
+            },
+          })
+        )
+      );
 
-      await sleep(5000);
-
-      SOURCE_ACCOUNTS_OBJECT = {
-        ...SOURCE_ACCOUNTS_OBJECT,
+      sourceAccountsObject = {
+        ...sourceAccountsObject,
         [response.data.ach.number]: response.data.id,
       };
     } else {
-      SOURCE_ACCOUNTS_OBJECT = {
-        ...SOURCE_ACCOUNTS_OBJECT,
+      sourceAccountsObject = {
+        ...sourceAccountsObject,
         [existingSourceAccount.ach.number]: existingSourceAccount.id,
       };
     }
   }
-  // console.log("source accounts object: ", SOURCE_ACCOUNTS_OBJECT);
+  return sourceAccountsObject;
 };
 
 // Create Individual Entities - Hardcode phone number
